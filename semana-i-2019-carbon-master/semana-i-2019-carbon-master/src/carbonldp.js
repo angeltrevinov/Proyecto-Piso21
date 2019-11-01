@@ -1,49 +1,34 @@
+
 import {CarbonLDP} from "carbonldp";
 
-export default function init() {
-    const carbonldp = new CarbonLDP("https://data-itesm.lab.base22.com/");
+const carbonldp = new CarbonLDP("https://data-itesm.lab.base22.com/");
 
-    carbonldp.documents.$getChildren("genres/").then((response) => {
-        console.log(response);
-        const genresDiv = document.querySelector("#genres");
-        response.forEach((genre) => {
-            const p = document.createElement("p");
-            p.appendChild(document.createTextNode(genre.originalValue));
-            genresDiv.appendChild(p);
+export default function getWeightbyKeyword(limit) {
+        return carbonldp.documents.$executeSELECTQuery(
+            `
+            PREFIX educore: <http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#>
+            PREFIX w3: <http://www.w3.org/2000/01/rdf-schema#>
+            SELECT ?keyword ?label (COUNT(?label) AS ?count)
+            WHERE {
+                <https://data-itesm.lab.base22.com/movies/> <http://www.w3.org/ns/ldp#contains> ?movie .
+                ?movie educore:Keyword ?keyword .
+                ?keyword w3:label ?label .
+            }
+            GROUP BY ?keyword ?label
+            ORDER BY DESC(?count)
+            LIMIT ` + limit
+
+        ).then((response) => {
+            let arr = [];
+            response.bindings.forEach((ob) => {
+                let json = {
+                    weight: ob.count,
+                    keyword: ob.label,
+                    link: ob.keyword.$id
+                }
+
+                arr.push(json);
+            });
+            return arr;
         });
-    });
-
-    // Executing a SPARQL query built with SPARQLer
-
-    carbonldp.documents.$sparql()
-        .prefix('ebucore', 'http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#')
-        .prefix('rdfs', 'http://www.w3.org/2000/01/rdf-schema#')
-        .select('keyword', 'keywordLabel')
-        .where(
-            _ => [
-                _.var('keyword')
-                    .has('a', _.resource('ebucore:Keyword'))
-                    .and(_.resource('rdfs:label'), _.var('keywordLabel'))
-            ])
-        .limit(10)
-        .execute()
-        .then((response) => {
-            console.log("SPARQLer result");
-            console.log(response);
-        });
-
-    // Executing a "raw" SPARQL query
-
-    carbonldp.documents.$executeSELECTQuery(
-        `
-        SELECT DISTINCT ?properties
-		WHERE {
-			?keyword a <http://www.ebu.ch/metadata/ontologies/ebucore/ebucore#Keyword> .
-			?keyword ?properties ?object .
-		} 
-    	`
-    ).then((response) => {
-        console.log("Raw SPARQL query result");
-        console.log(response);
-    });
-}
+    }
